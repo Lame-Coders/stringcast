@@ -1,0 +1,130 @@
+# Rust build artifacts
+/target/
+**/*.rs.bk
+Cargo.lock.orig
+
+# Tauri generated output
+/src-tauri/target/
+/src-tauri/gen/
+/src-tauri/.tauri/
+/src-tauri/.cargo/config.toml
+
+# Frontend dependencies and build output
+/node_modules/
+/**/node_modules/
+/dist/
+/build/
+/.next/
+/.nuxt/
+/.svelte-kit/
+/coverage/
+/.vite/
+/.turbo/
+/.parcel-cache/
+
+# Package manager caches and logs
+.npm/
+.pnpm-store/
+.yarn/
+!.yarn/patches/
+!.yarn/plugins/
+!.yarn/releases/
+!.yarn/sdks/
+!.yarn/versions/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+!.env.sample
+*.pem
+*.key
+*.p8
+*.p12
+*.pfx
+*.mobileprovision
+*.provisionprofile
+notarytool-password*
+certificate-password*
+
+# Stringcast local runtime/config data
+config.toml
+config.local.toml
+*.lock.local
+stringcast.lock
+logs/
+*.log
+*.trace
+*.prof
+*.heap
+*.pid
+
+# Generated installers, bundles, and release archives
+*.app/
+*.dmg
+*.pkg
+*.msi
+*.exe
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+*.rar
+*.deb
+*.rpm
+*.AppImage
+
+# macOS files
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows files
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Editor and IDE state
+.idea/
+.vscode/
+.antigravity/
+.claude/
+.cursor/
+*.swp
+*.swo
+*.swn
+*~
+.project
+.classpath
+.settings/
+
+# Test and temporary files
+/tmp/
+/temp/
+/.tmp/
+/.cache/
+*.tmp
+*.temp
+*.bak
+*.backup
+*.orig
+
+# Native/debug symbols
+*.dSYM/
+*.pdb
+*.ilk
+*.exp
+*.lib
