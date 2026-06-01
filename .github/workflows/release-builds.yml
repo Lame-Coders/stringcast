@@ -1,0 +1,80 @@
+name: Release Builds
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x86_64
+            os: ubuntu-latest
+            binary: stringcast
+            archive: stringcast-linux-x86_64.tar.gz
+          - name: macos
+            os: macos-latest
+            binary: stringcast
+            archive: stringcast-macos.tar.gz
+          - name: windows-x86_64
+            os: windows-latest
+            binary: stringcast.exe
+            archive: stringcast-windows-x86_64.zip
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            pkg-config \
+            libdbus-1-dev \
+            libxdo-dev \
+            libx11-dev \
+            libxi-dev \
+            libxtst-dev
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Prepare Unix artifact
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p dist/stringcast
+          cp "target/release/${{ matrix.binary }}" dist/stringcast/
+          cp README.md RUNNING.md SPEC.md dist/stringcast/
+          cp -R docs dist/stringcast/
+          tar -czf "dist/${{ matrix.archive }}" -C dist stringcast
+
+      - name: Prepare Windows artifact
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist/stringcast | Out-Null
+          Copy-Item "target/release/${{ matrix.binary }}" dist/stringcast/
+          Copy-Item README.md,RUNNING.md,SPEC.md dist/stringcast/
+          Copy-Item docs dist/stringcast/docs -Recurse
+          Compress-Archive -Path dist/stringcast -DestinationPath "dist/${{ matrix.archive }}" -Force
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.archive }}
+          path: dist/${{ matrix.archive }}
+          if-no-files-found: error
