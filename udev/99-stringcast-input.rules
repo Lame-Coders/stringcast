@@ -1,0 +1,5 @@
+# Allow members of the input group to read keyboard input devices.
+# Adjust permissions carefully; this is a sensitive capability.
+SUBSYSTEM=="input", GROUP="input", MODE="0660"
+# Allow uinput access for synthetic event injection.
+KERNEL=="uinput", MODE="0660", GROUP="input"

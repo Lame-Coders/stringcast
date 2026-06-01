@@ -24,6 +24,7 @@ use crate::platform::WindowsForegroundAppProvider as SystemForegroundAppProvider
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
 use crate::platform::{ForegroundApp, StaticForegroundAppProvider as SystemForegroundAppProvider};
 
+// Use Enigo-based simulator as the default system input simulator across platforms.
 type SystemInputSimulator = GuardedInputSimulator<EnigoInputSimulator>;
 type SystemExtractor = ClipboardTextExtractor<ArboardClipboard, SystemInputSimulator>;
 type SystemReplacer = ClipboardTextReplacer<ArboardClipboard, SystemInputSimulator>;

@@ -53,7 +53,7 @@ fn run() -> Result<(), String> {
 
     println!("Stringcast running. Config: {}", config_path.display());
 
-    let mut hook = RdevInputHook::new();
+    let mut hook = input_hook();
     hook.run(move |event| {
         let outcome = runtime.handle_event(event, Instant::now());
 
@@ -62,6 +62,10 @@ fn run() -> Result<(), String> {
         }
     })
     .map_err(|error| format!("input hook error: {error:?}"))
+}
+
+fn input_hook() -> RdevInputHook {
+    RdevInputHook::new()
 }
 
 fn ensure_config_exists(config_path: &Path) -> Result<(), String> {

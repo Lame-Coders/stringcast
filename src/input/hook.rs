@@ -4,6 +4,7 @@ use super::InputEvent;
 pub enum InputHookError {
     Unavailable,
     PermissionDenied,
+    UnsupportedPlatform(String),
 }
 
 pub trait InputHook {

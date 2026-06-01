@@ -16,3 +16,4 @@ pub use simulator::{
     EnigoInputSimulator, GuardedInputSimulator, InputSimulationError, InputSimulator,
     RecordedInputAction, RecordingInputSimulator,
 };
+
