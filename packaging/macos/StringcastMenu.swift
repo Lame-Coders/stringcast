@@ -1,55 +1,47 @@
 import AppKit
+import Darwin
 import Foundation
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private let menu = NSMenu()
-    private let stateItem = NSMenuItem(title: "Stringcast: Stopped", action: nil, keyEquivalent: "")
-    private let startItem = NSMenuItem(title: "Start Stringcast", action: #selector(startRuntime), keyEquivalent: "s")
-    private let stopItem = NSMenuItem(title: "Stop Stringcast", action: #selector(stopRuntimeFromMenu), keyEquivalent: "x")
-    private var runtimeProcess: Process?
-    private var logHandle: FileHandle?
+    private let stateItem = NSMenuItem(title: "Stringcast: Running", action: nil, keyEquivalent: "")
+    private let runtimePid = Int32(ProcessInfo.processInfo.environment["STRINGCAST_APP_RUNTIME_PID"] ?? "")
 
-    private var binaryURL: URL {
+    private var executableURL: URL {
         Bundle.main.bundleURL
             .appendingPathComponent("Contents")
-            .appendingPathComponent("Resources")
-            .appendingPathComponent("stringcast")
+            .appendingPathComponent("MacOS")
+            .appendingPathComponent("Stringcast")
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         configureStatusItem()
-        startRuntime()
-    }
-
-    func applicationWillTerminate(_ notification: Notification) {
-        stopRuntime()
     }
 
     private func configureStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.button?.title = "Stringcast"
+        statusItem.button?.title = "Stringcast On"
         statusItem.menu = menu
 
+        menu.delegate = self
         stateItem.isEnabled = false
         menu.addItem(stateItem)
         menu.addItem(NSMenuItem.separator())
 
-        startItem.target = self
-        menu.addItem(startItem)
-
-        stopItem.target = self
-        menu.addItem(stopItem)
-
-        menu.addItem(NSMenuItem.separator())
         addMenuItem("Status", #selector(showStatus), "i")
-        addMenuItem("Check Permissions", #selector(showPermissions), "p")
+        addMenuItem("Request Permissions", #selector(requestPermissions), "r")
         addMenuItem("Run API Test", #selector(runApiTest), "t")
         addMenuItem("Open Config", #selector(openConfig), "o")
         addMenuItem("Open Logs", #selector(openLogs), "l")
+        addMenuItem("Reveal App Executable", #selector(revealAppExecutable), "h")
 
         menu.addItem(NSMenuItem.separator())
         addMenuItem("Quit", #selector(quit), "q")
+        updateMenuState()
+    }
+
+    func menuWillOpen(_ menu: NSMenu) {
         updateMenuState()
     }
 
@@ -59,67 +51,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(item)
     }
 
-    @objc private func startRuntime() {
-        guard runtimeProcess?.isRunning != true else {
-            updateMenuState()
-            return
-        }
-
-        let process = Process()
-        process.executableURL = binaryURL
-        process.arguments = ["run"]
-        process.standardOutput = runtimeLogHandle()
-        process.standardError = runtimeLogHandle()
-        process.terminationHandler = { [weak self] terminatedProcess in
-            DispatchQueue.main.async {
-                if self?.runtimeProcess?.processIdentifier == terminatedProcess.processIdentifier {
-                    self?.runtimeProcess = nil
-                    self?.closeLogHandle()
-                    self?.updateMenuState()
-                }
-            }
-        }
-
-        do {
-            try process.run()
-            runtimeProcess = process
-            updateMenuState()
-        } catch {
-            showAlert(title: "Could Not Start Stringcast", message: error.localizedDescription)
-            closeLogHandle()
-            updateMenuState()
-        }
-    }
-
-    @objc private func stopRuntimeFromMenu() {
-        stopRuntime()
-    }
-
-    private func stopRuntime() {
-        guard let process = runtimeProcess else {
-            closeLogHandle()
-            updateMenuState()
-            return
-        }
-
-        if process.isRunning {
-            process.terminate()
-            DispatchQueue.global(qos: .utility).async {
-                process.waitUntilExit()
-            }
-        }
-
-        runtimeProcess = nil
-        closeLogHandle()
-        updateMenuState()
-    }
-
     @objc private func showStatus() {
         runCommand(title: "Stringcast Status", arguments: ["status"])
     }
 
-    @objc private func showPermissions() {
-        runCommand(title: "Stringcast Permissions", arguments: ["check-permissions"])
+    @objc private func requestPermissions() {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = self.commandOutput(arguments: ["request-permissions"])
+            DispatchQueue.main.async {
+                self.showPermissionAlert(message: result.output)
+            }
+        }
     }
 
     @objc private func runApiTest() {
@@ -145,8 +87,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSWorkspace.shared.open(logDirectoryURL())
     }
 
+    @objc private func revealAppExecutable() {
+        NSWorkspace.shared.activateFileViewerSelecting([executableURL])
+    }
+
     @objc private func quit() {
-        stopRuntime()
+        if let runtimePid, runtimePid > 0 {
+            Darwin.kill(runtimePid, SIGTERM)
+        }
         NSApp.terminate(nil)
     }
 
@@ -161,7 +109,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func commandOutput(arguments: [String]) -> (exitCode: Int32, output: String) {
         let process = Process()
-        process.executableURL = binaryURL
+        process.executableURL = executableURL
         process.arguments = arguments
 
         let pipe = Pipe()
@@ -180,31 +128,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func updateMenuState() {
-        let running = runtimeProcess?.isRunning == true
+        let running = runtimeIsRunning()
         stateItem.title = running ? "Stringcast: Running" : "Stringcast: Stopped"
         statusItem.button?.title = running ? "Stringcast On" : "Stringcast Off"
-        startItem.isEnabled = !running
-        stopItem.isEnabled = running
     }
 
-    private func runtimeLogHandle() -> FileHandle {
-        if let logHandle {
-            return logHandle
+    private func runtimeIsRunning() -> Bool {
+        guard let runtimePid, runtimePid > 0 else {
+            return false
         }
-
-        let url = logFileURL()
-        FileManager.default.createFile(atPath: url.path, contents: nil)
-        let handle = (try? FileHandle(forWritingTo: url)) ?? FileHandle.standardError
-        _ = try? handle.seekToEnd()
-        logHandle = handle
-        return handle
-    }
-
-    private func closeLogHandle() {
-        if let logHandle {
-            try? logHandle.close()
-        }
-        logHandle = nil
+        return Darwin.kill(runtimePid, 0) == 0
     }
 
     private func logDirectoryURL() -> URL {
@@ -214,10 +147,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return directory
     }
 
-    private func logFileURL() -> URL {
-        logDirectoryURL().appendingPathComponent("stringcast-app.log")
-    }
-
     private func showAlert(title: String, message: String, isError: Bool = false) {
         let alert = NSAlert()
         alert.messageText = title
@@ -225,6 +154,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.alertStyle = isError ? .warning : .informational
         alert.addButton(withTitle: "OK")
         alert.runModal()
+    }
+
+    private func showPermissionAlert(message: String) {
+        let alert = NSAlert()
+        alert.messageText = "Stringcast Needs Permissions"
+        alert.informativeText = """
+        \(message)
+
+        Grant permissions to Stringcast.app. The runtime now runs as the app executable:
+        \(executableURL.path)
+        """
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Open Accessibility")
+        alert.addButton(withTitle: "Open Input Monitoring")
+        alert.addButton(withTitle: "Reveal App Executable")
+        alert.addButton(withTitle: "OK")
+
+        let response = alert.runModal()
+        if response == .alertFirstButtonReturn {
+            openSystemSettings("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+        } else if response == .alertSecondButtonReturn {
+            openSystemSettings("x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")
+        } else if response == .alertThirdButtonReturn {
+            revealAppExecutable()
+        }
+    }
+
+    private func openSystemSettings(_ urlString: String) {
+        guard let url = URL(string: urlString) else {
+            return
+        }
+        NSWorkspace.shared.open(url)
     }
 }
 

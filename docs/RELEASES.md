@@ -82,7 +82,7 @@ Or launch the app wrapper:
 open Stringcast.app
 ```
 
-The app starts Stringcast in the background and adds a menu-bar item with status, start, stop, permissions, API test, config, logs, and quit actions.
+The app runs Stringcast as the app executable and adds a companion menu-bar item with status, request permissions, API test, config, logs, reveal executable, and quit actions.
 
 macOS may ask for:
 

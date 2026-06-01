@@ -3,6 +3,7 @@ use super::{
     PlatformContextError,
 };
 use std::process::Command;
+use std::{ffi::c_void, ptr};
 
 #[derive(Debug, Clone, Default)]
 pub struct MacOsForegroundAppProvider;
@@ -98,10 +99,47 @@ fn accessibility_trusted() -> bool {
     unsafe { AXIsProcessTrusted() }
 }
 
+pub fn request_accessibility_permission() -> bool {
+    unsafe {
+        let keys = [kAXTrustedCheckOptionPrompt];
+        let values = [kCFBooleanTrue];
+        let options = CFDictionaryCreate(
+            ptr::null(),
+            keys.as_ptr(),
+            values.as_ptr(),
+            1,
+            ptr::null(),
+            ptr::null(),
+        );
+
+        let trusted = AXIsProcessTrustedWithOptions(options);
+        if !options.is_null() {
+            CFRelease(options);
+        }
+        trusted
+    }
+}
+
 #[link(name = "ApplicationServices", kind = "framework")]
 unsafe extern "C" {
     fn IsSecureEventInputEnabled() -> bool;
     fn AXIsProcessTrusted() -> bool;
+    static kAXTrustedCheckOptionPrompt: *const c_void;
+    fn AXIsProcessTrustedWithOptions(options: *const c_void) -> bool;
+}
+
+#[link(name = "CoreFoundation", kind = "framework")]
+unsafe extern "C" {
+    static kCFBooleanTrue: *const c_void;
+    fn CFDictionaryCreate(
+        allocator: *const c_void,
+        keys: *const *const c_void,
+        values: *const *const c_void,
+        num_values: isize,
+        key_callbacks: *const c_void,
+        value_callbacks: *const c_void,
+    ) -> *const c_void;
+    fn CFRelease(cf: *const c_void);
 }
 
 #[cfg(test)]

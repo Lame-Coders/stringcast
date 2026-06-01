@@ -5,7 +5,7 @@ if [ "${1:-}" = "--help" ]; then
   cat <<'USAGE'
 usage: packaging/macos/build_app.sh [release-binary-path] [output-dir]
 
-Builds an unsigned menu-bar Stringcast.app bundle around the Rust CLI binary.
+Builds an unsigned Stringcast.app bundle where the Rust runtime is the app executable.
 
 Defaults:
   release-binary-path: target/release/stringcast
@@ -46,13 +46,13 @@ rm -rf "$APP_DIR"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 
 cp packaging/macos/Info.plist "$CONTENTS_DIR/Info.plist"
+cp "$BIN_PATH" "$MACOS_DIR/Stringcast"
 xcrun --sdk macosx swiftc \
   -module-cache-path "${TMPDIR:-/tmp}/stringcast-swift-module-cache" \
   packaging/macos/StringcastMenu.swift \
   -framework AppKit \
-  -o "$MACOS_DIR/Stringcast"
-cp "$BIN_PATH" "$RESOURCES_DIR/stringcast"
+  -o "$MACOS_DIR/StringcastMenu"
 
-chmod +x "$MACOS_DIR/Stringcast" "$RESOURCES_DIR/stringcast"
+chmod +x "$MACOS_DIR/Stringcast" "$MACOS_DIR/StringcastMenu"
 
 echo "Built $APP_DIR"
