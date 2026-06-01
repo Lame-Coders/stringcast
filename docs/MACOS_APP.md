@@ -31,6 +31,18 @@ The app is written to:
 dist/macos/Stringcast.app
 ```
 
+Build a drag-to-Applications DMG:
+
+```bash
+packaging/macos/build_dmg.sh
+```
+
+The DMG is written to:
+
+```text
+dist/stringcast-macos.dmg
+```
+
 Open it:
 
 ```bash
@@ -78,13 +90,10 @@ The app does not block startup on this permission check. If permissions are miss
 ## Current Limitations
 
 - The app is unsigned.
-- There is no custom app icon yet.
 - Logs open in Finder rather than an in-app viewer.
-- Packaging does not create a DMG or installer yet.
+- The DMG is unsigned and not notarized.
 
 ## Next Packaging Steps
 
-- Add an icon.
 - Add log/status display.
 - Add code signing and notarization.
-- Produce a DMG for end users.
