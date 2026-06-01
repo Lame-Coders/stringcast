@@ -1,8 +1,8 @@
 # macOS App Wrapper
 
-Stringcast can be packaged as an unsigned `.app` bundle around the Rust CLI binary. This gives macOS a stable app identity for permissions and Keychain prompts while the runtime still uses the existing CLI internally.
+Stringcast can be packaged as an unsigned menu-bar `.app` bundle around the Rust CLI binary. This gives macOS a stable app identity for permissions and Keychain prompts while the runtime still uses the existing CLI internally.
 
-This is not a full menu-bar UI yet. Launching the app starts `stringcast run` in the background.
+Launching the app starts `stringcast run` in the background and adds a `Stringcast` item to the macOS menu bar.
 
 ## Build Locally
 
@@ -25,7 +25,18 @@ Open it:
 open dist/macos/Stringcast.app
 ```
 
-Stop it:
+Use the menu-bar item to:
+
+- View status
+- Start Stringcast
+- Stop Stringcast
+- Check permissions
+- Run an API test
+- Open the config file
+- Open logs
+- Quit
+
+Stop it from Terminal if needed:
 
 ```bash
 pkill -f "Stringcast.app"
@@ -44,15 +55,13 @@ If permissions were granted to a terminal binary before, macOS may ask again bec
 ## Current Limitations
 
 - The app is unsigned.
-- There is no menu-bar UI yet.
-- There is no visible quit control yet.
-- Logs are not surfaced in an app window.
+- There is no custom app icon yet.
+- Logs open in Finder rather than an in-app viewer.
 - Packaging does not create a DMG or installer yet.
 
 ## Next Packaging Steps
 
 - Add an icon.
-- Add a menu-bar process with Start/Stop/Quit controls.
 - Add log/status display.
 - Add code signing and notarization.
 - Produce a DMG for end users.
