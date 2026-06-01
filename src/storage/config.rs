@@ -167,7 +167,7 @@ impl Default for ProviderConfig {
     fn default() -> Self {
         Self {
             active: "gemini".to_string(),
-            gemini_model: "gemini-2.0-flash-lite".to_string(),
+            gemini_model: "gemini-3.1-flash-lite".to_string(),
             openai_model: "gpt-4o-mini".to_string(),
             anthropic_model: "claude-haiku-4-5".to_string(),
             custom_base_url: String::new(),
@@ -325,6 +325,32 @@ impl AppConfig {
         Ok(())
     }
 
+    pub fn set_provider_model(
+        &mut self,
+        provider: &str,
+        model: impl Into<String>,
+    ) -> Result<(), ConfigError> {
+        let model = model.into();
+        if model.trim().is_empty() {
+            return Err(ConfigError::Validation(
+                "provider model must not be empty".to_string(),
+            ));
+        }
+
+        match provider {
+            "gemini" => self.provider.gemini_model = model,
+            "openai" => self.provider.openai_model = model,
+            "anthropic" => self.provider.anthropic_model = model,
+            "custom" => self.provider.custom_model = model,
+            _ => {
+                return Err(ConfigError::Validation(
+                    "provider must be one of: gemini, openai, anthropic, custom".to_string(),
+                ));
+            }
+        }
+        Ok(())
+    }
+
     pub fn active_provider_key_count(&self) -> usize {
         self.api_keys
             .iter()
@@ -437,6 +463,17 @@ mod tests {
 
         assert!(!config.general.enabled);
         assert_eq!(config.provider.active, "openai");
+    }
+
+    #[test]
+    fn can_set_provider_model() {
+        let mut config = AppConfig::default();
+
+        config
+            .set_provider_model("gemini", "gemini-3.1-flash-lite")
+            .unwrap();
+
+        assert_eq!(config.provider.gemini_model, "gemini-3.1-flash-lite");
     }
 
     #[test]

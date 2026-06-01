@@ -28,6 +28,7 @@ pub struct OperationSnapshot {
     pub app_id: String,
     pub window_id: Option<String>,
     pub extracted_text: String,
+    pub replacement_target_text: String,
     pub transform_input: String,
     pub trigger_text: String,
 }
@@ -209,6 +210,7 @@ mod tests {
                 app_id: "com.example.App".to_string(),
                 window_id: Some("window-1".to_string()),
                 extracted_text: "hello ?fix".to_string(),
+                replacement_target_text: "hello ?fix".to_string(),
                 transform_input: "hello".to_string(),
                 trigger_text: "?fix".to_string(),
             })

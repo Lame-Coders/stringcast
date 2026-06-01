@@ -2,6 +2,10 @@ use std::env;
 use std::path::Path;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
+use stringcast::api::{
+    ApiClient, ApiClientConfig, KeyMaterialStore, KeyPool, ReqwestHttpTransport,
+    StaticKeyMaterialStore,
+};
 use stringcast::input::{InputHook, RdevInputHook};
 use stringcast::platform::{PermissionChecker, SystemPermissionChecker};
 use stringcast::runtime::StringcastRuntime;
@@ -22,9 +26,11 @@ fn run() -> Result<(), String> {
         Some("enable") => return set_enabled(true),
         Some("disable") => return set_enabled(false),
         Some("set-provider") => return set_provider(&args[1..]),
+        Some("set-model") => return set_model(&args[1..]),
         Some("show-config") => return show_config_path(),
         Some("check-permissions") => return check_permissions(),
         Some("add-key") => return add_key(&args[1..]),
+        Some("api-test") => return api_test(),
         Some("run") | None => {}
         Some(command) => return Err(format!("unknown command: {command}\n{}", usage())),
     }
@@ -41,7 +47,8 @@ fn run() -> Result<(), String> {
 
     preflight_permissions()?;
 
-    let mut runtime = StringcastRuntime::from_config(&config, KeyringKeyMaterialStore)
+    let key_material = load_key_material(&config)?;
+    let mut runtime = StringcastRuntime::from_config(&config, key_material)
         .map_err(|error| format!("runtime build error: {error:?}"))?;
 
     println!("Stringcast running. Config: {}", config_path.display());
@@ -175,6 +182,37 @@ fn set_provider(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+fn set_model(args: &[String]) -> Result<(), String> {
+    if args.len() < 2 {
+        return Err(format!(
+            "set-model requires <provider> <model>\n{}",
+            usage()
+        ));
+    }
+
+    let provider = &args[0];
+    let model = &args[1];
+    let config_path =
+        config_file_path().map_err(|error| format!("config path error: {error:?}"))?;
+    let mut config = AppConfig::load(&config_path).map_err(|error| {
+        format!(
+            "could not load config from {}: {error:?}",
+            config_path.display()
+        )
+    })?;
+
+    config
+        .set_provider_model(provider, model)
+        .map_err(|error| format!("invalid model setting: {error:?}"))?;
+    config.provider.active = provider.to_string();
+    config
+        .save_atomic(&config_path)
+        .map_err(|error| format!("could not save config: {error:?}"))?;
+    println!("Active provider: {provider}");
+    println!("{provider} model: {model}");
+    Ok(())
+}
+
 fn add_key(args: &[String]) -> Result<(), String> {
     if args.len() < 2 {
         return Err(format!(
@@ -225,6 +263,68 @@ fn add_key(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+fn api_test() -> Result<(), String> {
+    let config_path =
+        config_file_path().map_err(|error| format!("config path error: {error:?}"))?;
+    let config = AppConfig::load(&config_path).map_err(|error| {
+        format!(
+            "could not load config from {}: {error:?}",
+            config_path.display()
+        )
+    })?;
+    let api_config = ApiClientConfig::try_from(&config)
+        .map_err(|error| format!("api config error: {error:?}"))?;
+    let key_pool = KeyPool::from_config(&config.api_keys)
+        .map_err(|error| format!("key pool error: {error}"))?;
+    let transport = ReqwestHttpTransport::new(std::time::Duration::from_millis(
+        config.api.response_timeout_ms,
+    ))
+    .map_err(|error| format!("transport build error: {error}"))?;
+
+    println!(
+        "Testing provider={} model={} keys={}",
+        config.provider.active,
+        api_config.model,
+        key_pool.keys().len()
+    );
+
+    let key_material = load_key_material(&config)?;
+    let mut client = ApiClient::new(api_config, key_pool, transport, key_material);
+    match client.transform("Reply with OK only.", "health check", false, Instant::now()) {
+        Ok(output) => {
+            println!("API test succeeded: {output}");
+            Ok(())
+        }
+        Err(error) => Err(format!("API test failed: {error}")),
+    }
+}
+
+fn load_key_material(config: &AppConfig) -> Result<StaticKeyMaterialStore, String> {
+    let keyring = KeyringKeyMaterialStore;
+    let mut keys = Vec::new();
+
+    for key in config.api_keys.iter().filter(|key| {
+        key.provider == config.provider.active && key.status.eq_ignore_ascii_case("active")
+    }) {
+        let Some(secret) = keyring.key_material(&key.id) else {
+            return Err(format!(
+                "missing keychain secret for {}/{}; re-add it with STRINGCAST_API_KEY=<secret> cargo run -- add-key {} {}",
+                key.provider, key.id, key.provider, key.id
+            ));
+        };
+        keys.push((key.id.clone(), secret));
+    }
+
+    if keys.is_empty() {
+        return Err(format!(
+            "no active API key configured for provider '{}'",
+            config.provider.active
+        ));
+    }
+
+    Ok(StaticKeyMaterialStore::new(keys))
+}
+
 fn unix_timestamp_string() -> String {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -240,7 +340,9 @@ fn usage() -> &'static str {
   stringcast enable
   stringcast disable
   stringcast set-provider <gemini|openai|anthropic|custom>
+  stringcast set-model <gemini|openai|anthropic|custom> <model>
   stringcast show-config
   stringcast check-permissions
+  stringcast api-test
   STRINGCAST_API_KEY=<secret> stringcast add-key <gemini|openai|anthropic|custom> <key-id> [alias]"
 }

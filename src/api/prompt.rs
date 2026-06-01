@@ -106,10 +106,10 @@ fn map_api_error(error: ApiClientError) -> TransformError {
             TransformError::EmptyOutput
         }
         ApiClientError::Transport(_) => TransformError::ApiUnavailable,
-        ApiClientError::BadRequest
+        ApiClientError::BadRequest(_)
         | ApiClientError::Provider(_)
         | ApiClientError::RetryExhausted
-        | ApiClientError::UnexpectedStatus(_) => TransformError::ProviderRejected,
+        | ApiClientError::UnexpectedStatus { .. } => TransformError::ProviderRejected,
     }
 }
 

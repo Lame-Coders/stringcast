@@ -78,6 +78,7 @@ pub struct TransformationPipeline<E, T, R> {
     extractor: E,
     transformer: T,
     replacer: R,
+    progress_marker: Option<String>,
 }
 
 impl<E, T, R> TransformationPipeline<E, T, R>
@@ -93,6 +94,24 @@ where
             extractor,
             transformer,
             replacer,
+            progress_marker: None,
+        }
+    }
+
+    pub fn with_progress_marker(
+        registry: CommandRegistry,
+        extractor: E,
+        transformer: T,
+        replacer: R,
+        progress_marker: impl Into<String>,
+    ) -> Self {
+        Self {
+            registry,
+            orchestrator: OperationOrchestrator::new(),
+            extractor,
+            transformer,
+            replacer,
+            progress_marker: Some(progress_marker.into()),
         }
     }
 
@@ -145,31 +164,99 @@ where
         window_id: Option<String>,
     ) -> Result<PipelineOutcome, PipelineError> {
         let operation_id = self.orchestrator.begin_static_extraction()?;
-        let snapshot = self.extractor.extract(ExtractionContext {
+        let snapshot = match self.extractor.extract(ExtractionContext {
             operation_id,
             app_id,
             window_id,
             trigger_match: trigger_match.clone(),
-        })?;
-        self.orchestrator.complete_extraction(snapshot.clone())?;
+        }) {
+            Ok(snapshot) => snapshot,
+            Err(error) => {
+                self.orchestrator.fail();
+                return Err(PipelineError::Extraction(error));
+            }
+        };
+        if let Err(error) = self.orchestrator.complete_extraction(snapshot.clone()) {
+            self.orchestrator.fail();
+            return Err(PipelineError::Orchestrator(error));
+        }
 
-        let replacement_text = self
+        let progress_text = self.progress_text(&snapshot);
+        let current_text = progress_text
+            .as_deref()
+            .unwrap_or(&snapshot.replacement_target_text);
+        if let Some(progress_text) = progress_text.as_ref() {
+            if let Err(error) = self.replacer.replace_current(
+                &snapshot,
+                &snapshot.replacement_target_text,
+                progress_text,
+            ) {
+                self.orchestrator.fail();
+                return Err(PipelineError::Replacement(error));
+            }
+        }
+
+        let replacement_text = match self
             .transformer
-            .transform(&trigger_match.command, &snapshot.transform_input)?;
+            .transform(&trigger_match.command, &snapshot.transform_input)
+        {
+            Ok(replacement_text) => replacement_text,
+            Err(error) => {
+                self.restore_after_progress(&snapshot, current_text);
+                self.orchestrator.fail();
+                return Err(PipelineError::Transform(error));
+            }
+        };
         if replacement_text.trim().is_empty() {
+            self.restore_after_progress(&snapshot, current_text);
             self.orchestrator.fail();
             return Err(PipelineError::Transform(TransformError::EmptyOutput));
         }
 
-        self.orchestrator.begin_replacement()?;
-        self.replacer.replace(&snapshot, &replacement_text)?;
-        self.orchestrator.begin_verification()?;
-        self.orchestrator.complete()?;
+        if let Err(error) = self.orchestrator.begin_replacement() {
+            self.orchestrator.fail();
+            return Err(PipelineError::Orchestrator(error));
+        }
+        if let Err(error) =
+            self.replacer
+                .replace_current(&snapshot, current_text, &replacement_text)
+        {
+            self.orchestrator.fail();
+            return Err(PipelineError::Replacement(error));
+        }
+        if let Err(error) = self.orchestrator.begin_verification() {
+            self.orchestrator.fail();
+            return Err(PipelineError::Orchestrator(error));
+        }
+        if let Err(error) = self.orchestrator.complete() {
+            self.orchestrator.fail();
+            return Err(PipelineError::Orchestrator(error));
+        }
 
         Ok(PipelineOutcome::Replaced {
             trigger_text: snapshot.trigger_text,
             replacement_text,
         })
+    }
+
+    fn progress_text(&self, snapshot: &crate::orchestrator::OperationSnapshot) -> Option<String> {
+        self.progress_marker
+            .as_ref()
+            .map(|marker| format!("{} {marker}", snapshot.replacement_target_text))
+    }
+
+    fn restore_after_progress(
+        &mut self,
+        snapshot: &crate::orchestrator::OperationSnapshot,
+        current_text: &str,
+    ) {
+        if self.progress_marker.is_some() {
+            let _ = self.replacer.replace_current(
+                snapshot,
+                current_text,
+                &snapshot.replacement_target_text,
+            );
+        }
     }
 }
 
@@ -177,7 +264,7 @@ where
 mod tests {
     use super::*;
     use crate::commands::CommandKind;
-    use crate::extraction::BufferTextExtractor;
+    use crate::extraction::{BufferTextExtractor, ExtractionContext};
     use crate::platform::{
         ExclusionMatcher, ForegroundApp, OperationGate, OperationGateDecision,
         StaticForegroundAppProvider,
@@ -198,6 +285,20 @@ mod tests {
         ) -> Result<String, TransformError> {
             self.calls.push((command.kind.clone(), input.to_string()));
             self.output.clone()
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    struct FailingExtractor {
+        error: ExtractionError,
+    }
+
+    impl TextExtractor for FailingExtractor {
+        fn extract(
+            &mut self,
+            _context: ExtractionContext,
+        ) -> Result<crate::orchestrator::OperationSnapshot, ExtractionError> {
+            Err(self.error.clone())
         }
     }
 
@@ -275,6 +376,98 @@ mod tests {
             Err(PipelineError::Transform(TransformError::ProviderRejected))
         );
         assert!(replacer.replacements.is_empty());
+    }
+
+    #[test]
+    fn progress_marker_is_replaced_by_final_output() {
+        let mut pipeline = TransformationPipeline::with_progress_marker(
+            CommandRegistry::new(),
+            BufferTextExtractor,
+            FakeTransformer {
+                output: Ok("I do not know.".to_string()),
+                calls: vec![],
+            },
+            NoopTextReplacer::default(),
+            "[Stringcast working...]",
+        );
+
+        let outcome = pipeline
+            .process_buffer("i dont no ?fix", "com.example.App", None)
+            .unwrap();
+        let (_, _, _, replacer) = pipeline.into_parts();
+
+        assert_eq!(
+            outcome,
+            PipelineOutcome::Replaced {
+                trigger_text: "?fix".to_string(),
+                replacement_text: "I do not know.".to_string()
+            }
+        );
+        assert_eq!(replacer.replacements.len(), 2);
+        assert_eq!(
+            replacer.replacements[0].1,
+            "i dont no ?fix [Stringcast working...]"
+        );
+        assert_eq!(replacer.replacements[1].1, "I do not know.");
+    }
+
+    #[test]
+    fn progress_marker_is_restored_on_transform_failure() {
+        let mut pipeline = TransformationPipeline::with_progress_marker(
+            CommandRegistry::new(),
+            BufferTextExtractor,
+            FakeTransformer {
+                output: Err(TransformError::ProviderRejected),
+                calls: vec![],
+            },
+            NoopTextReplacer::default(),
+            "[Stringcast working...]",
+        );
+
+        let result = pipeline.process_buffer("hello ?fix", "com.example.App", None);
+        let (_, _, _, replacer) = pipeline.into_parts();
+
+        assert_eq!(
+            result,
+            Err(PipelineError::Transform(TransformError::ProviderRejected))
+        );
+        assert_eq!(replacer.replacements.len(), 2);
+        assert_eq!(
+            replacer.replacements[0].1,
+            "hello ?fix [Stringcast working...]"
+        );
+        assert_eq!(replacer.replacements[1].1, "hello ?fix");
+    }
+
+    #[test]
+    fn extraction_failure_resets_active_operation() {
+        let mut pipeline = TransformationPipeline::new(
+            CommandRegistry::new(),
+            FailingExtractor {
+                error: ExtractionError::TriggerMissingFromSnapshot,
+            },
+            FakeTransformer {
+                output: Ok("hello".to_string()),
+                calls: vec![],
+            },
+            NoopTextReplacer::default(),
+        );
+
+        let first = pipeline.process_buffer("hello ?fix", "com.example.App", None);
+        let second = pipeline.process_buffer("hello ?fix", "com.example.App", None);
+
+        assert_eq!(
+            first,
+            Err(PipelineError::Extraction(
+                ExtractionError::TriggerMissingFromSnapshot
+            ))
+        );
+        assert_eq!(
+            second,
+            Err(PipelineError::Extraction(
+                ExtractionError::TriggerMissingFromSnapshot
+            ))
+        );
     }
 
     #[test]

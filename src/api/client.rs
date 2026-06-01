@@ -62,8 +62,11 @@ pub enum ApiClientError {
     Provider(ProviderError),
     Transport(TransportError),
     RetryExhausted,
-    BadRequest,
-    UnexpectedStatus(u16),
+    BadRequest(Option<String>),
+    UnexpectedStatus {
+        status: u16,
+        message: Option<String>,
+    },
 }
 
 pub trait HttpTransport {
@@ -200,27 +203,96 @@ where
                     self.key_pool.mark_success(&key.id);
                     return Ok(parsed);
                 }
-                400 => return Err(ApiClientError::BadRequest),
+                400 => {
+                    return Err(ApiClientError::BadRequest(provider_error_message(
+                        &response,
+                    )))
+                }
                 401 | 403 => {
                     self.key_pool.mark_invalid(&key.id);
-                    last_error = Some(ApiClientError::UnexpectedStatus(response.status));
+                    last_error = Some(ApiClientError::UnexpectedStatus {
+                        status: response.status,
+                        message: provider_error_message(&response),
+                    });
                 }
                 429 => {
                     let retry_after =
                         retry_after_duration(&response).unwrap_or_else(|| Duration::from_secs(60));
                     self.key_pool.mark_rate_limited(&key.id, now + retry_after);
-                    last_error = Some(ApiClientError::UnexpectedStatus(429));
+                    last_error = Some(ApiClientError::UnexpectedStatus {
+                        status: 429,
+                        message: provider_error_message(&response),
+                    });
                 }
                 500 | 502 | 503 | 504 => {
-                    last_error = Some(ApiClientError::UnexpectedStatus(response.status));
+                    last_error = Some(ApiClientError::UnexpectedStatus {
+                        status: response.status,
+                        message: provider_error_message(&response),
+                    });
                 }
-                status => return Err(ApiClientError::UnexpectedStatus(status)),
+                status => {
+                    return Err(ApiClientError::UnexpectedStatus {
+                        status,
+                        message: provider_error_message(&response),
+                    })
+                }
             }
         }
 
         Err(last_error.unwrap_or(ApiClientError::RetryExhausted))
     }
 }
+
+fn provider_error_message(response: &HttpResponse) -> Option<String> {
+    let body = response.body.trim();
+    if body.is_empty() {
+        return None;
+    }
+
+    let message = serde_json::from_str::<serde_json::Value>(body)
+        .ok()
+        .and_then(|value| {
+            value
+                .pointer("/error/message")
+                .or_else(|| value.pointer("/message"))
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string)
+        })
+        .unwrap_or_else(|| body.to_string());
+
+    Some(message.chars().take(500).collect())
+}
+
+impl std::fmt::Display for ApiClientError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NoKeysAvailable => write!(formatter, "no active API keys are available"),
+            Self::MissingKeyMaterial(key_id) => {
+                write!(formatter, "key material is missing for key id '{key_id}'")
+            }
+            Self::Provider(error) => write!(formatter, "provider response error: {error:?}"),
+            Self::Transport(error) => write!(formatter, "transport error: {error:?}"),
+            Self::RetryExhausted => write!(formatter, "retry attempts exhausted"),
+            Self::BadRequest(message) => write_status_error(formatter, 400, message),
+            Self::UnexpectedStatus { status, message } => {
+                write_status_error(formatter, *status, message)
+            }
+        }
+    }
+}
+
+fn write_status_error(
+    formatter: &mut std::fmt::Formatter<'_>,
+    status: u16,
+    message: &Option<String>,
+) -> std::fmt::Result {
+    match message {
+        Some(message) => write!(formatter, "provider returned HTTP {status}: {message}"),
+        None => write!(formatter, "provider returned HTTP {status}"),
+    }
+}
+
+impl std::error::Error for ApiClientError {}
 
 fn retry_after_duration(response: &HttpResponse) -> Option<Duration> {
     response
@@ -376,7 +448,45 @@ mod tests {
 
         let result = client.transform("Fix text.", "helo", false, Instant::now());
 
-        assert_eq!(result, Err(ApiClientError::UnexpectedStatus(401)));
+        assert_eq!(
+            result,
+            Err(ApiClientError::UnexpectedStatus {
+                status: 401,
+                message: None
+            })
+        );
         assert_eq!(client.key_pool().keys()[0].status, KeyStatus::Invalid);
+    }
+
+    #[test]
+    fn includes_provider_error_message() {
+        let transport = FakeTransport {
+            responses: vec![Ok(HttpResponse {
+                status: 400,
+                headers: vec![],
+                body: r#"{"error":{"message":"API key not valid"}}"#.to_string(),
+            })],
+            sent_urls: vec![],
+        };
+        let key_material =
+            StaticKeyMaterialStore::new([("key-1".to_string(), "secret".to_string())]);
+        let mut client = ApiClient::new(
+            ApiClientConfig {
+                max_attempts: 1,
+                ..config()
+            },
+            KeyPool::new(vec![api_key("key-1")]),
+            transport,
+            key_material,
+        );
+
+        let result = client.transform("Fix text.", "helo", false, Instant::now());
+
+        assert_eq!(
+            result,
+            Err(ApiClientError::BadRequest(Some(
+                "API key not valid".to_string()
+            )))
+        );
     }
 }

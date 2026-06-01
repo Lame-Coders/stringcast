@@ -1,6 +1,8 @@
 use crate::clipboard::{ClipboardBackend, ClipboardError};
 use crate::input::{InputSimulationError, InputSimulator};
 use crate::orchestrator::OperationSnapshot;
+use std::thread;
+use std::time::Duration;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ReplacementError {
@@ -16,6 +18,16 @@ pub trait TextReplacer {
         snapshot: &OperationSnapshot,
         replacement_text: &str,
     ) -> Result<(), ReplacementError>;
+
+    fn replace_current(
+        &mut self,
+        snapshot: &OperationSnapshot,
+        current_text: &str,
+        replacement_text: &str,
+    ) -> Result<(), ReplacementError> {
+        let _ = current_text;
+        self.replace(snapshot, replacement_text)
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -33,17 +45,47 @@ impl TextReplacer for NoopTextReplacer {
             .push((snapshot.clone(), replacement_text.to_string()));
         Ok(())
     }
+
+    fn replace_current(
+        &mut self,
+        snapshot: &OperationSnapshot,
+        current_text: &str,
+        replacement_text: &str,
+    ) -> Result<(), ReplacementError> {
+        let _ = current_text;
+        self.replace(snapshot, replacement_text)
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct ClipboardTextReplacer<C, I> {
     clipboard: C,
     input: I,
+    select_all_wait: Duration,
+    clipboard_restore_wait: Duration,
 }
 
 impl<C, I> ClipboardTextReplacer<C, I> {
     pub fn new(clipboard: C, input: I) -> Self {
-        Self { clipboard, input }
+        Self::with_delays(clipboard, input, Duration::ZERO, Duration::ZERO)
+    }
+
+    pub fn with_restore_wait(clipboard: C, input: I, clipboard_restore_wait: Duration) -> Self {
+        Self::with_delays(clipboard, input, Duration::ZERO, clipboard_restore_wait)
+    }
+
+    pub fn with_delays(
+        clipboard: C,
+        input: I,
+        select_all_wait: Duration,
+        clipboard_restore_wait: Duration,
+    ) -> Self {
+        Self {
+            clipboard,
+            input,
+            select_all_wait,
+            clipboard_restore_wait,
+        }
     }
 
     pub fn into_parts(self) -> (C, I) {
@@ -58,13 +100,24 @@ where
 {
     fn replace(
         &mut self,
+        snapshot: &OperationSnapshot,
+        replacement_text: &str,
+    ) -> Result<(), ReplacementError> {
+        self.replace_current(snapshot, &snapshot.extracted_text, replacement_text)
+    }
+
+    fn replace_current(
+        &mut self,
         _snapshot: &OperationSnapshot,
+        _current_text: &str,
         replacement_text: &str,
     ) -> Result<(), ReplacementError> {
         let original_clipboard = self.clipboard.snapshot()?;
         self.clipboard.set_text(replacement_text)?;
         self.input.select_all()?;
+        thread::sleep(self.select_all_wait);
         self.input.paste()?;
+        thread::sleep(self.clipboard_restore_wait);
         self.clipboard.restore(&original_clipboard)?;
         Ok(())
     }
@@ -94,6 +147,7 @@ mod tests {
             app_id: "com.example.App".to_string(),
             window_id: None,
             extracted_text: "helo ?fix".to_string(),
+            replacement_target_text: "helo ?fix".to_string(),
             transform_input: "helo".to_string(),
             trigger_text: "?fix".to_string(),
         }

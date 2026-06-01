@@ -2,6 +2,8 @@ use crate::clipboard::{ClipboardBackend, ClipboardError};
 use crate::detection::TriggerMatch;
 use crate::input::{InputSimulationError, InputSimulator};
 use crate::orchestrator::OperationSnapshot;
+use std::thread;
+use std::time::Duration;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExtractionContext {
@@ -40,6 +42,10 @@ impl TextExtractor for BufferTextExtractor {
                 "{} {}",
                 context.trigger_match.transform_input, context.trigger_match.trigger_text
             ),
+            replacement_target_text: format!(
+                "{} {}",
+                context.trigger_match.transform_input, context.trigger_match.trigger_text
+            ),
             transform_input: context.trigger_match.transform_input,
             trigger_text: context.trigger_match.trigger_text,
         })
@@ -50,11 +56,27 @@ impl TextExtractor for BufferTextExtractor {
 pub struct ClipboardTextExtractor<C, I> {
     clipboard: C,
     input: I,
+    select_all_wait: Duration,
+    clipboard_read_wait: Duration,
 }
 
 impl<C, I> ClipboardTextExtractor<C, I> {
     pub fn new(clipboard: C, input: I) -> Self {
-        Self { clipboard, input }
+        Self::with_delays(clipboard, input, Duration::ZERO, Duration::ZERO)
+    }
+
+    pub fn with_delays(
+        clipboard: C,
+        input: I,
+        select_all_wait: Duration,
+        clipboard_read_wait: Duration,
+    ) -> Self {
+        Self {
+            clipboard,
+            input,
+            select_all_wait,
+            clipboard_read_wait,
+        }
     }
 
     pub fn into_parts(self) -> (C, I) {
@@ -74,7 +96,9 @@ where
         let original_clipboard = self.clipboard.snapshot()?;
 
         self.input.select_all()?;
+        thread::sleep(self.select_all_wait);
         self.input.copy()?;
+        thread::sleep(self.clipboard_read_wait);
 
         let copied_text = self
             .clipboard
@@ -90,6 +114,7 @@ where
             operation_id: context.operation_id,
             app_id: context.app_id,
             window_id: context.window_id,
+            replacement_target_text: copied_text.clone(),
             extracted_text: copied_text,
             transform_input,
             trigger_text: context.trigger_match.trigger_text,
@@ -165,6 +190,7 @@ mod tests {
         let (_, input) = extractor.into_parts();
 
         assert_eq!(snapshot.extracted_text, "actual field text ?fix");
+        assert_eq!(snapshot.replacement_target_text, "actual field text ?fix");
         assert_eq!(snapshot.transform_input, "actual field text");
         assert_eq!(
             input.actions,

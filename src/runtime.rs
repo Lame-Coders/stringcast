@@ -43,6 +43,10 @@ pub struct RuntimePlan {
     pub api_config: ApiClientConfig,
     pub gate: OperationGate,
     pub response_timeout: Duration,
+    pub show_spinner: bool,
+    pub select_all_wait: Duration,
+    pub clipboard_read_wait: Duration,
+    pub clipboard_restore_wait: Duration,
 }
 
 #[derive(Debug)]
@@ -76,6 +80,12 @@ impl RuntimePlan {
                 ExclusionMatcher::from_config(&config.exclusions),
             ),
             response_timeout: Duration::from_millis(config.api.response_timeout_ms),
+            show_spinner: config.general.show_spinner,
+            select_all_wait: Duration::from_millis(config.extraction.select_all_wait_ms),
+            clipboard_read_wait: Duration::from_millis(config.extraction.clipboard_read_wait_ms),
+            clipboard_restore_wait: Duration::from_millis(
+                config.extraction.clipboard_restore_wait_ms,
+            ),
         })
     }
 }
@@ -95,21 +105,35 @@ where
         let api_client = ApiClient::new(plan.api_config, plan.key_pool, transport, key_material);
         let transformer = ApiTextTransformer::new(api_client);
 
-        let extractor = ClipboardTextExtractor::new(
+        let extractor = ClipboardTextExtractor::with_delays(
             ArboardClipboard::new().map_err(RuntimeBuildError::Clipboard)?,
             GuardedInputSimulator::new(
                 EnigoInputSimulator::new().map_err(RuntimeBuildError::Input)?,
                 guard.clone(),
             ),
+            plan.select_all_wait,
+            plan.clipboard_read_wait,
         );
-        let replacer = ClipboardTextReplacer::new(
+        let replacer = ClipboardTextReplacer::with_delays(
             ArboardClipboard::new().map_err(RuntimeBuildError::Clipboard)?,
             GuardedInputSimulator::new(
                 EnigoInputSimulator::new().map_err(RuntimeBuildError::Input)?,
                 guard.clone(),
             ),
+            plan.select_all_wait,
+            plan.clipboard_restore_wait,
         );
-        let pipeline = TransformationPipeline::new(plan.registry, extractor, transformer, replacer);
+        let pipeline = if plan.show_spinner {
+            TransformationPipeline::with_progress_marker(
+                plan.registry,
+                extractor,
+                transformer,
+                replacer,
+                "[Stringcast working...]",
+            )
+        } else {
+            TransformationPipeline::new(plan.registry, extractor, transformer, replacer)
+        };
 
         Ok(Self {
             controller: InputController::new(
@@ -172,6 +196,10 @@ mod tests {
         assert_eq!(plan.api_config.model, "gpt-4o-mini");
         assert_eq!(plan.key_pool.keys().len(), 1);
         assert_eq!(plan.response_timeout, Duration::from_millis(30_000));
+        assert!(plan.show_spinner);
+        assert_eq!(plan.select_all_wait, Duration::from_millis(100));
+        assert_eq!(plan.clipboard_read_wait, Duration::from_millis(300));
+        assert_eq!(plan.clipboard_restore_wait, Duration::from_millis(150));
     }
 
     #[test]
