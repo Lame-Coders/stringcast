@@ -96,6 +96,8 @@ Release workflows build downloadable binaries for:
 
 Download artifacts from the GitHub Actions release workflow or from GitHub Releases once release publishing is enabled.
 
+See [docs/RELEASES.md](docs/RELEASES.md) for artifact download and smoke-test steps.
+
 ## Development
 
 Run the local checks:
@@ -117,6 +119,7 @@ sudo apt install build-essential pkg-config libdbus-1-dev libxdo-dev libx11-dev 
 ## Documentation
 
 - [RUNNING.md](RUNNING.md): developer/local run instructions.
+- [docs/RELEASES.md](docs/RELEASES.md): downloadable artifact instructions.
 - [SPEC.md](SPEC.md): product and architecture spec.
 - [docs/WAYLAND_POC.md](docs/WAYLAND_POC.md): experimental Linux Wayland listener notes.
 
