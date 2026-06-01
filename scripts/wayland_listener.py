@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """
-Wayland trigger listener (PoC)
+Linux Wayland trigger listener (PoC)
 - Reads keyboard events from /dev/input via evdev
 - Injects synthetic keys via evdev.UInput
 - On trigger (default "?fix") erases typed text and calls AI API in background
+
+This is experimental and Linux-only. It is intentionally separate from the
+Rust Stringcast runtime and does not use the Rust config/keychain flow.
 
 USAGE:
   - Configure environment variables:
@@ -19,7 +22,6 @@ import os
 import sys
 import time
 import threading
-import json
 import subprocess
 from dataclasses import dataclass
 from typing import Optional
@@ -61,14 +63,6 @@ class ProviderAttempt:
 
 def _clean_provider(value: str) -> str:
     return value.strip().lower()
-
-
-def _first_env(*names: str) -> Optional[str]:
-    for name in names:
-        value = os.environ.get(name)
-        if value and value.strip():
-            return value.strip()
-    return None
 
 
 def _split_env_keys(*names: str) -> list[str]:
