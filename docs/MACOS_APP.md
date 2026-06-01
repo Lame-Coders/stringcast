@@ -13,6 +13,18 @@ cargo build --release
 packaging/macos/build_app.sh
 ```
 
+To include the app icon, save a square PNG at:
+
+```text
+packaging/macos/StringcastIcon.png
+```
+
+The packaging script converts it to `Contents/Resources/StringcastIcon.icns`. You can also use a different source path for local builds:
+
+```bash
+STRINGCAST_ICON=/path/to/icon.png packaging/macos/build_app.sh
+```
+
 The app is written to:
 
 ```text
