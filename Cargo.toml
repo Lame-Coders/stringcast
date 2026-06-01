@@ -23,6 +23,3 @@ enigo = "0.2"
 rdev = "0.5"
 directories = "5"
 keyring = "2"
-evdev = { version = "0.13", default-features = false }
-uinput = "0.1"
-xkbcommon = "0.9"

@@ -5,14 +5,14 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-# Run as root so the service can read /dev/input/event* and write to uinput.
+# PoC default: root can read /dev/input/event* and write to uinput.
+# For a lower-privilege setup, create a dedicated user and apply the sample
+# udev rules in udev/99-stringcast-input.rules.
 User=root
 Group=root
-WorkingDirectory=/home/babayaga/Documents/stringcast
-Environment=STRINGCAST_API_KEY=replace-me
-Environment=STRINGCAST_TRIGGER=?fix
-Environment=STRINGCAST_API_URL=https://api.openai.com/v1/chat/completions
-ExecStart=/usr/bin/python3 /home/babayaga/Documents/stringcast/scripts/wayland_listener.py
+WorkingDirectory=/opt/stringcast
+EnvironmentFile=-/etc/stringcast/wayland-listener.env
+ExecStart=/opt/stringcast/.venv/bin/python /opt/stringcast/scripts/wayland_listener.py
 Restart=on-failure
 RestartSec=3
 

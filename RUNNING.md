@@ -176,80 +176,18 @@ sudo systemctl enable --now stringcast.service
 
 On macOS you'd use `launchd` or a user agent; on Windows use a scheduled task or NSSM/svc wrapper.
 
-## 8) Ubuntu Wayland listener (Python PoC)
+## 8) Linux Wayland fallback
 
-Ubuntu Wayland does not allow a normal desktop app to capture global keyboard input reliably, so this repository includes a Python listener that reads `/dev/input` and injects synthetic keystrokes through `uinput`.
+The primary Stringcast runtime is the Rust app. A separate Python Wayland listener exists as an experimental Linux-only fallback for environments where normal global keyboard hooks are blocked.
 
-This is a separate Linux-only background service. It is intended for Ubuntu/Wayland users who are willing to grant device access.
+See [docs/WAYLAND_POC.md](docs/WAYLAND_POC.md) before using it. It reads keyboard devices from `/dev/input`, injects events through `uinput`, and therefore has sensitive permissions and security tradeoffs.
 
-### Dependencies
-
-Install system packages:
-
-```bash
-sudo apt update
-sudo apt install python3 python3-pip python3-venv pkg-config libudev-dev
-```
-
-Create a virtual environment and install Python packages:
-
-```bash
-python3 -m venv .venv
-. .venv/bin/activate
-pip install evdev requests python-uinput
-```
-
-### Configure the API key
-
-The listener reads the API key from `STRINGCAST_API_KEY`:
-
-```bash
-export STRINGCAST_API_KEY="your-secret-here"
-```
-
-You can also set the trigger and provider URL:
-
-```bash
-export STRINGCAST_TRIGGER="?fix"
-export STRINGCAST_API_URL="https://api.openai.com/v1/chat/completions"
-```
-
-For multiple keys, use comma-separated lists in the provider-specific variables:
-
-```bash
-export GEMINI_API_KEYS="gemini-key-1,gemini-key-2"
-export OPENAI_API_KEYS="openai-key-1"
-export ANTHROPIC_API_KEYS="claude-key-1,claude-key-2"
-export XAI_API_KEYS="grok-key-1"
-```
-
-The listener will try keys in order and fall back quickly if one fails.
-
-### Install the service
-
-Copy the service file to systemd and enable it:
-
-```bash
-sudo cp systemd/stringcast-wayland-listener.service /etc/systemd/system/stringcast-wayland-listener.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now stringcast-wayland-listener.service
-```
-
-The example service runs as `root` so it can access `/dev/input` and `uinput`. If you prefer a less-privileged setup, use the sample `udev/99-stringcast-input.rules` file and run a service account in the `input` group.
-
-### Notes
-
-- The PoC currently supports basic ASCII and Shift-aware keys.
-- It uses a background thread for the AI call so input capture stays responsive.
-- If the API fails, the script shows an error string instead of crashing.
-- This is intentionally separate from the Rust desktop app.
-
-## 8) Troubleshooting
+## 9) Troubleshooting
 - Linker errors on Linux often mean missing native dev packages (e.g., `-lxdo`). Install `libxdo-dev` / `xdotool` system packages.
 - If replacements re-trigger the app, verify `SyntheticInputGuard` behavior and ensure the app's simulated input is suppressed by the listener.
 - If clipboard operations fail in certain apps, those apps may block select/copy; see `SPEC.md` for fallback behavior.
 
-## 9) Notes
+## 10) Notes
 - This repo uses select-all + clipboard to read active-field text. The app restores the clipboard after each operation.
 - For development, `cargo run -- run` is easiest; for production, prefer `cargo build --release` and run the release binary.
 
