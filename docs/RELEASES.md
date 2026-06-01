@@ -1,20 +1,21 @@
 # Release Artifacts
 
-Stringcast can be distributed as downloadable binaries from GitHub Actions. This lets users run the Rust app without installing Cargo.
+Stringcast can be distributed as downloadable artifacts from GitHub Actions. This lets users run the Rust app without installing Cargo.
 
-The current artifacts are raw CLI binaries, not full desktop installers. A macOS app wrapper and richer desktop packaging are planned separately.
+The macOS build includes both a tarball and a drag-to-Applications DMG. Linux and Windows currently ship archive artifacts.
 
 ## Build Artifacts
 
 The `Release Builds` workflow creates:
 
 ```text
+stringcast-macos.dmg
 stringcast-macos.tar.gz
 stringcast-linux-x86_64.tar.gz
 stringcast-windows-x86_64.zip
 ```
 
-Each archive includes:
+Each platform archive includes:
 
 - `stringcast` or `stringcast.exe`
 - `Stringcast.app` in the macOS archive
@@ -53,6 +54,14 @@ gh run download <run-id> -D ./artifacts
 ```
 
 ## macOS Smoke Test
+
+For the DMG:
+
+```bash
+open stringcast-macos.dmg
+```
+
+Then drag `Stringcast.app` to Applications, or launch it directly from the mounted volume for a quick test.
 
 Unpack:
 

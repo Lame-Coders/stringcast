@@ -48,8 +48,8 @@ if ! command -v sips >/dev/null 2>&1; then
   exit 1
 fi
 
-if ! command -v iconutil >/dev/null 2>&1; then
-  echo "missing iconutil; cannot generate app icon" >&2
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "missing python3; cannot generate app icon" >&2
   exit 1
 fi
 
@@ -65,21 +65,40 @@ xcrun --sdk macosx swiftc \
   -o "$MACOS_DIR/StringcastMenu"
 
 if [ -f "$ICON_SOURCE" ]; then
-  ICONSET_DIR="$OUT_DIR/StringcastIcon.iconset"
-  rm -rf "$ICONSET_DIR"
-  mkdir -p "$ICONSET_DIR"
-  sips -z 16 16 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_16x16.png" >/dev/null
-  sips -z 32 32 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_16x16@2x.png" >/dev/null
-  sips -z 32 32 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_32x32.png" >/dev/null
-  sips -z 64 64 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_32x32@2x.png" >/dev/null
-  sips -z 128 128 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_128x128.png" >/dev/null
-  sips -z 256 256 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_128x128@2x.png" >/dev/null
-  sips -z 256 256 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_256x256.png" >/dev/null
-  sips -z 512 512 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_256x256@2x.png" >/dev/null
-  sips -z 512 512 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_512x512.png" >/dev/null
-  sips -z 1024 1024 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_512x512@2x.png" >/dev/null
-  iconutil -c icns "$ICONSET_DIR" -o "$RESOURCES_DIR/StringcastIcon.icns"
-  rm -rf "$ICONSET_DIR"
+  ICON_WORK_DIR="$OUT_DIR/StringcastIcon.work"
+  rm -rf "$ICON_WORK_DIR"
+  mkdir -p "$ICON_WORK_DIR"
+  sips -Z 1024 "$ICON_SOURCE" --out "$ICON_WORK_DIR/icon-scaled.png" >/dev/null
+  sips --padToHeightWidth 1024 1024 --padColor FFFFFF "$ICON_WORK_DIR/icon-scaled.png" --out "$ICON_WORK_DIR/icon-1024.png" >/dev/null 2>&1
+  for size in 16 32 64 128 256 512 1024; do
+    sips -z "$size" "$size" "$ICON_WORK_DIR/icon-1024.png" --out "$ICON_WORK_DIR/icon_${size}.png" >/dev/null
+  done
+  python3 - "$RESOURCES_DIR/StringcastIcon.icns" "$ICON_WORK_DIR" <<'PY'
+import struct
+import sys
+from pathlib import Path
+
+output = Path(sys.argv[1])
+source_dir = Path(sys.argv[2])
+entries = [
+    (b"icp4", "icon_16.png"),
+    (b"icp5", "icon_32.png"),
+    (b"icp6", "icon_64.png"),
+    (b"ic07", "icon_128.png"),
+    (b"ic08", "icon_256.png"),
+    (b"ic09", "icon_512.png"),
+    (b"ic10", "icon_1024.png"),
+]
+
+chunks = []
+for icon_type, filename in entries:
+    data = (source_dir / filename).read_bytes()
+    chunks.append(icon_type + struct.pack(">I", len(data) + 8) + data)
+
+payload = b"".join(chunks)
+output.write_bytes(b"icns" + struct.pack(">I", len(payload) + 8) + payload)
+PY
+  rm -rf "$ICON_WORK_DIR"
 else
   echo "warning: icon source not found: $ICON_SOURCE" >&2
   echo "         save the app icon PNG there, or set STRINGCAST_ICON=/path/to/icon.png" >&2
