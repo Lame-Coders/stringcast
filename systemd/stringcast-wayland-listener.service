@@ -1,0 +1,20 @@
+[Unit]
+Description=Stringcast Wayland Listener (evdev/uinput)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Run as root so the service can read /dev/input/event* and write to uinput.
+User=root
+Group=root
+WorkingDirectory=/home/babayaga/Documents/stringcast
+Environment=STRINGCAST_API_KEY=replace-me
+Environment=STRINGCAST_TRIGGER=?fix
+Environment=STRINGCAST_API_URL=https://api.openai.com/v1/chat/completions
+ExecStart=/usr/bin/python3 /home/babayaga/Documents/stringcast/scripts/wayland_listener.py
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

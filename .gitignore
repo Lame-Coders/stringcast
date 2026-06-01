@@ -128,3 +128,11 @@ $RECYCLE.BIN/
 *.ilk
 *.exp
 *.lib
+
+# Python virtual environment
+.venv/
+venv/
+ENV/
+
+# Rust build artifacts
+target/
