@@ -17,6 +17,7 @@ stringcast-windows-x86_64.zip
 Each archive includes:
 
 - `stringcast` or `stringcast.exe`
+- `Stringcast.app` in the macOS archive
 - `README.md`
 - `RUNNING.md`
 - `SPEC.md`
@@ -75,6 +76,12 @@ Run the app:
 ./stringcast run
 ```
 
+Or launch the app wrapper:
+
+```bash
+open Stringcast.app
+```
+
 macOS may ask for:
 
 - Accessibility permission for keyboard automation.
@@ -82,6 +89,8 @@ macOS may ask for:
 - Keychain access when the binary reads a stored API key.
 
 If permissions were already granted to a different terminal or binary path, macOS may still ask again for the downloaded binary.
+
+See [MACOS_APP.md](MACOS_APP.md) for current app-wrapper limitations.
 
 ## Linux Smoke Test
 

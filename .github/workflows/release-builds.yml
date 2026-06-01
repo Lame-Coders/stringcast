@@ -60,6 +60,10 @@ jobs:
           cp "target/release/${{ matrix.binary }}" dist/stringcast/
           cp README.md RUNNING.md SPEC.md dist/stringcast/
           cp -R docs dist/stringcast/
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            packaging/macos/build_app.sh "target/release/${{ matrix.binary }}" dist/macos
+            cp -R dist/macos/Stringcast.app dist/stringcast/
+          fi
           tar -czf "dist/${{ matrix.archive }}" -C dist stringcast
 
       - name: Prepare Windows artifact

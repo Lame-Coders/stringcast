@@ -98,6 +98,8 @@ Download artifacts from the GitHub Actions release workflow or from GitHub Relea
 
 See [docs/RELEASES.md](docs/RELEASES.md) for artifact download and smoke-test steps.
 
+The macOS release also includes an unsigned `Stringcast.app` wrapper. See [docs/MACOS_APP.md](docs/MACOS_APP.md) for build and testing notes.
+
 ## Development
 
 Run the local checks:
@@ -120,6 +122,7 @@ sudo apt install build-essential pkg-config libdbus-1-dev libxdo-dev libx11-dev 
 
 - [RUNNING.md](RUNNING.md): developer/local run instructions.
 - [docs/RELEASES.md](docs/RELEASES.md): downloadable artifact instructions.
+- [docs/MACOS_APP.md](docs/MACOS_APP.md): macOS app wrapper notes.
 - [SPEC.md](SPEC.md): product and architecture spec.
 - [docs/WAYLAND_POC.md](docs/WAYLAND_POC.md): experimental Linux Wayland listener notes.
 

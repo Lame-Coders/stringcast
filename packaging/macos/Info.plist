@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>en</string>
+  <key>CFBundleDisplayName</key>
+  <string>Stringcast</string>
+  <key>CFBundleExecutable</key>
+  <string>Stringcast</string>
+  <key>CFBundleIdentifier</key>
+  <string>com.lamecoders.stringcast</string>
+  <key>CFBundleInfoDictionaryVersion</key>
+  <string>6.0</string>
+  <key>CFBundleName</key>
+  <string>Stringcast</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleShortVersionString</key>
+  <string>0.1.0</string>
+  <key>CFBundleVersion</key>
+  <string>0.1.0</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>12.0</string>
+  <key>LSUIElement</key>
+  <true/>
+  <key>NSHumanReadableCopyright</key>
+  <string>Copyright © 2026 Lame-Coders</string>
+  <key>NSAppleEventsUsageDescription</key>
+  <string>Stringcast checks the foreground app so it can avoid sensitive or unsupported contexts.</string>
+  <key>NSInputMonitoringUsageDescription</key>
+  <string>Stringcast listens for typed trigger commands so it can transform text in the active field.</string>
+  <key>NSAccessibilityUsageDescription</key>
+  <string>Stringcast uses accessibility permissions to copy, paste, and replace text in the active field.</string>
+</dict>
+</plist>
