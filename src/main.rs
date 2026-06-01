@@ -1,6 +1,5 @@
 use std::env;
 use std::path::Path;
-use std::process::Command;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use stringcast::api::{
@@ -174,7 +173,7 @@ fn launch_app_menu_if_needed() {
         return;
     }
 
-    let _ = Command::new(menu_exe)
+    let _ = std::process::Command::new(menu_exe)
         .env("STRINGCAST_APP_RUNTIME_PID", std::process::id().to_string())
         .spawn();
 }
