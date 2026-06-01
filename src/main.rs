@@ -6,7 +6,7 @@ use stringcast::api::{
     ApiClient, ApiClientConfig, KeyMaterialStore, KeyPool, ReqwestHttpTransport,
     StaticKeyMaterialStore,
 };
-use stringcast::input::{InputHook, RdevInputHook};
+use stringcast::input::{InputControllerOutcome, InputEvent, InputHook, RdevInputHook};
 use stringcast::platform::{PermissionChecker, SystemPermissionChecker};
 use stringcast::runtime::StringcastRuntime;
 use stringcast::storage::{config_file_path, ApiKeyConfig, AppConfig, KeyringKeyMaterialStore};
@@ -29,6 +29,7 @@ fn run() -> Result<(), String> {
         Some("set-model") => return set_model(&args[1..]),
         Some("show-config") => return show_config_path(),
         Some("check-permissions") => return check_permissions(),
+        Some("request-permissions") => return request_permissions(),
         Some("add-key") => return add_key(&args[1..]),
         Some("api-test") => return api_test(),
         Some("run") | None => {}
@@ -45,7 +46,12 @@ fn run() -> Result<(), String> {
         )
     })?;
 
-    preflight_permissions()?;
+    launch_app_menu_if_needed();
+    request_app_permissions_if_needed();
+
+    if !skip_permission_preflight() {
+        preflight_permissions()?;
+    }
 
     let key_material = load_key_material(&config)?;
     let mut runtime = StringcastRuntime::from_config(&config, key_material)
@@ -54,11 +60,25 @@ fn run() -> Result<(), String> {
     println!("Stringcast running. Config: {}", config_path.display());
 
     let mut hook = input_hook();
+    let log_events = log_events();
     hook.run(move |event| {
+        if log_events {
+            eprintln!("Stringcast input event: {}", describe_input_event(&event));
+        }
+
         let outcome = runtime.handle_event(event, Instant::now());
 
-        if let Err(error) = outcome {
-            eprintln!("Stringcast event error: {error:?}");
+        match outcome {
+            Ok(outcome) if log_events => {
+                eprintln!(
+                    "Stringcast input outcome: {}",
+                    describe_input_outcome(&outcome)
+                );
+            }
+            Ok(_) => {}
+            Err(error) => {
+                eprintln!("Stringcast event error: {error:?}");
+            }
         }
     })
     .map_err(|error| format!("input hook error: {error:?}"))
@@ -86,6 +106,91 @@ fn preflight_permissions() -> Result<(), String> {
     report.startup_error_message().map_or(Ok(()), Err)
 }
 
+fn skip_permission_preflight() -> bool {
+    env::var("STRINGCAST_SKIP_PERMISSION_PREFLIGHT").is_ok_and(|value| value == "1")
+        || running_from_app_bundle()
+}
+
+fn log_events() -> bool {
+    env::var("STRINGCAST_LOG_EVENTS").is_ok_and(|value| value == "1")
+}
+
+fn describe_input_event(event: &InputEvent) -> String {
+    match event {
+        InputEvent::Text(text) => format!("Text(len={})", text.chars().count()),
+        InputEvent::Backspace => "Backspace".to_string(),
+        InputEvent::Delete => "Delete".to_string(),
+        InputEvent::Enter => "Enter".to_string(),
+        InputEvent::Escape => "Escape".to_string(),
+        InputEvent::Tab => "Tab".to_string(),
+        InputEvent::Navigation(key) => format!("Navigation({key:?})"),
+        InputEvent::MouseButton => "MouseButton".to_string(),
+        InputEvent::Shortcut(shortcut) => format!("Shortcut({shortcut:?})"),
+        InputEvent::FocusChanged => "FocusChanged".to_string(),
+        InputEvent::SleepOrLock => "SleepOrLock".to_string(),
+    }
+}
+
+fn describe_input_outcome(outcome: &InputControllerOutcome) -> String {
+    match outcome {
+        InputControllerOutcome::IgnoredSynthetic => "IgnoredSynthetic".to_string(),
+        InputControllerOutcome::BufferUpdated(buffer) => {
+            format!("BufferUpdated(len={})", buffer.chars().count())
+        }
+        InputControllerOutcome::BufferCleared => "BufferCleared".to_string(),
+        InputControllerOutcome::Pipeline(outcome) => format!("Pipeline({outcome:?})"),
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn running_from_app_bundle() -> bool {
+    env::current_exe()
+        .ok()
+        .and_then(|path| path.to_str().map(str::to_string))
+        .is_some_and(|path| path.contains(".app/Contents/MacOS/"))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn running_from_app_bundle() -> bool {
+    false
+}
+
+#[cfg(target_os = "macos")]
+fn launch_app_menu_if_needed() {
+    if !running_from_app_bundle() || env::var("STRINGCAST_APP_MENU_DISABLED").is_ok() {
+        return;
+    }
+
+    let Ok(exe) = env::current_exe() else {
+        return;
+    };
+    let Some(macos_dir) = exe.parent() else {
+        return;
+    };
+
+    let menu_exe = macos_dir.join("StringcastMenu");
+    if !menu_exe.exists() {
+        return;
+    }
+
+    let _ = std::process::Command::new(menu_exe)
+        .env("STRINGCAST_APP_RUNTIME_PID", std::process::id().to_string())
+        .spawn();
+}
+
+#[cfg(not(target_os = "macos"))]
+fn launch_app_menu_if_needed() {}
+
+#[cfg(target_os = "macos")]
+fn request_app_permissions_if_needed() {
+    if running_from_app_bundle() {
+        let _ = stringcast::platform::request_accessibility_permission();
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn request_app_permissions_if_needed() {}
+
 fn check_permissions() -> Result<(), String> {
     let report = SystemPermissionChecker::default().permission_report();
     println!("Accessibility: {:?}", report.accessibility);
@@ -94,6 +199,24 @@ fn check_permissions() -> Result<(), String> {
         println!("{message}");
     }
     Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn request_permissions() -> Result<(), String> {
+    let trusted = stringcast::platform::request_accessibility_permission();
+    let report = SystemPermissionChecker::default().permission_report();
+    println!("Accessibility prompt requested: {trusted}");
+    println!("Accessibility: {:?}", report.accessibility);
+    println!("Input Monitoring: {:?}", report.input_monitoring);
+    println!(
+        "If macOS opens Privacy & Security, enable Stringcast or stringcast, then restart Stringcast."
+    );
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn request_permissions() -> Result<(), String> {
+    check_permissions()
 }
 
 fn init_config() -> Result<(), String> {
@@ -347,6 +470,7 @@ fn usage() -> &'static str {
   stringcast set-model <gemini|openai|anthropic|custom> <model>
   stringcast show-config
   stringcast check-permissions
+  stringcast request-permissions
   stringcast api-test
   STRINGCAST_API_KEY=<secret> stringcast add-key <gemini|openai|anthropic|custom> <key-id> [alias]"
 }

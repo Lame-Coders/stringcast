@@ -1,7 +1,0 @@
-#!/bin/sh
-set -eu
-
-APP_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-BIN="$APP_DIR/Resources/stringcast"
-
-exec "$BIN" run

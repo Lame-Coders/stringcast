@@ -98,7 +98,7 @@ Download artifacts from the GitHub Actions release workflow or from GitHub Relea
 
 See [docs/RELEASES.md](docs/RELEASES.md) for artifact download and smoke-test steps.
 
-The macOS release also includes an unsigned `Stringcast.app` wrapper. See [docs/MACOS_APP.md](docs/MACOS_APP.md) for build and testing notes.
+The macOS release also includes an unsigned `Stringcast.app` bundle with a companion menu-bar item. See [docs/MACOS_APP.md](docs/MACOS_APP.md) for build and testing notes.
 
 ## Development
 

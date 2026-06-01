@@ -82,6 +82,8 @@ Or launch the app wrapper:
 open Stringcast.app
 ```
 
+The app runs Stringcast as the app executable and adds a companion menu-bar item with status, request permissions, API test, config, logs, reveal executable, and quit actions.
+
 macOS may ask for:
 
 - Accessibility permission for keyboard automation.

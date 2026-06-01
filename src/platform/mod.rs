@@ -7,7 +7,9 @@ mod macos;
 mod windows;
 
 #[cfg(target_os = "macos")]
-pub use macos::{MacOsForegroundAppProvider, MacOsPermissionChecker};
+pub use macos::{
+    request_accessibility_permission, MacOsForegroundAppProvider, MacOsPermissionChecker,
+};
 
 #[cfg(target_os = "windows")]
 pub use windows::WindowsForegroundAppProvider;
