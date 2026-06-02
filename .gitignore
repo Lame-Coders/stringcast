@@ -140,3 +140,6 @@ __pycache__/
 
 # Rust build artifacts
 target/
+
+#configuration
+scripts/config.ini
