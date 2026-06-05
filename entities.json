@@ -1,0 +1,19 @@
+{
+  "people": [
+    "Abhinav Gautam"
+  ],
+  "projects": [
+    "stringcast"
+  ],
+  "topics": [
+    "Rust",
+    "Python",
+    "Linux",
+    "Windows",
+    "Wayland",
+    "Gemini",
+    "OpenAI",
+    "Goals",
+    "Provider"
+  ]
+}
