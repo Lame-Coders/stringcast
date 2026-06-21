@@ -1,132 +1,96 @@
-# Stringcast
+# ✨ Stringcast (Wayland UI Edition)
 
-Stringcast is a system-wide AI text transformation tool. Type text in a field, end it with a trigger such as `?fix`, and Stringcast sends the selected text to your configured AI provider, shows a short working marker, then replaces the field with the result.
+Stringcast is a lightweight, floating desktop utility that uses AI to instantly transform your text. 
 
-The current app is a Rust CLI/runtime MVP. It works from a terminal today; packaged desktop apps and installers are planned next.
+* It acts as your persistent, "always-on-top" AI assistant right on your desktop.
+* It is perfect for fixing grammar, adopting a professional tone, or translating a paragraph.
+* This project is specifically designed as a secure, root-free solution for modern Linux desktops running Wayland.
 
-## Status
+---
 
-- Primary runtime: Rust.
-- macOS: actively tested during development.
-- Windows: runtime scaffolding exists, needs real user testing.
-- Linux X11: intended to use the Rust runtime.
-- Linux Wayland: separate experimental Python fallback exists in [docs/WAYLAND_POC.md](docs/WAYLAND_POC.md).
+## 🌟 Key Features
 
-For macOS and Windows users, the preferred direction is downloadable Rust binaries/apps, not a separate Python implementation.
+* **Always-On-Top UI:** A sleek, floating PyQt6 interface that stays accessible over your other windows.
+* **Instant AI Transformations:** Powered by Google's `gemini-2.0-flash` (and OpenAI as a fallback) to rewrite, translate, or summarize text instantly.
+* **Frictionless Workflow:** Simply paste your text, select a transformation, and copy the polished result back to your clipboard.
+* **Standalone Executable:** Fully compiled with PyInstaller—users don't need to install Python or system libraries to run it.
 
-## Features
+## 🛡️ The Wayland Security Model
 
-- System-wide trigger detection.
-- Clipboard-based text extraction and replacement.
-- Inline working marker while the API request is in flight.
-- API key metadata in config and secrets in OS key storage.
-- Provider support for Gemini, OpenAI, Anthropic, and custom OpenAI-compatible APIs.
-- Built-in commands for grammar, tone, summary, translation, and more.
+If you use a modern Linux desktop (GNOME, KDE on Wayland), you might wonder why this isn't a background script that listens to your keyboard. 
 
-## Commands
+* **Strict Isolation:** By design, Wayland strictly isolates applications. It intentionally blocks global key-logging and synthetic keystroke injection to protect users from malicious software.
+* **The Sudo Problem:** While workarounds exist (like reading raw hardware events via `/dev/input`), they require running scripts as `root` (using `sudo`).
+* **The Environment Conflict:** Running desktop scripts as `root` is insecure, cumbersome for daily use, and breaks standard Python virtual environments.
+* **Our Solution:** This application bypasses the issue entirely using a native graphical interface. It provides a seamless copy-paste workflow that fully respects Wayland's security sandbox—meaning no `sudo` required!
 
-Static commands:
+---
 
-```text
-?fix        Fix grammar, spelling, and punctuation
-?improve    Improve clarity and readability
-?shorten    Shorten text
-?expand     Expand with more detail
-?formal     Rewrite formally
-?casual     Rewrite casually
-?emoji      Add tasteful emojis
-?reply      Generate a reply
-?bullets    Convert to bullet points
-?summarize  Summarize in 1-3 sentences
-```
+## 🚀 Installation & Usage (For Users)
 
-Dynamic commands:
+You do not need to install Python or touch the terminal to use Stringcast.
 
-```text
-?translate:<lang>
-?ask:<question>
-```
+**1. Download the App**
+* Navigate to the [Releases page](https://github.com/mclovin22117/stringcast_wayland/releases) of this repository.
+* Download the latest `stringcast_ui.zip` file and extract it.
 
-Examples:
+**2. Configure your API Key**
+* In the exact same folder where you extracted the `stringcast_ui` app, create a new text file named `.env`.
+* Open the file and add your Gemini API key (and optionally OpenAI):
+```env
+  GEMINI_API_KEY="your_actual_key_here"
+  # OPENAI_API_KEY="optional_fallback_key"
+  ```
 
-```text
-i dont knwo whats happening ?fix
-hello, how are you ?translate:hi
-This paragraph is too long. ?ask:make it sound more confident
-```
+**3. Run the Application**
+* **Make it Executable:** Right-click the downloaded `stringcast_ui` file -> **Properties** -> **Permissions** -> check **"Allow executing file as program"**. *(Alternatively, run `chmod +x stringcast_ui` in your terminal).*
+* **Launch:** Double-click the file to open the floating window and start transforming text!
 
-## Quick Start From Source
+---
 
-Install Rust, then run:
+## 🛠️ Development & Building from Source
 
+Want to add custom prompts, new languages, or UI features? Building Stringcast from source is straightforward.
+
+**1. Clone & Setup**
 ```bash
-cargo run -- init
-cargo run -- check-permissions
+git clone [https://github.com/mclovin22117/stringcast_wayland.git](https://github.com/mclovin22117/stringcast_wayland.git)
+cd stringcast_wayland
+python3 -m venv venv
+source venv/bin/activate
 ```
 
-Add an API key:
-
+**2. Install Dependencies**
 ```bash
-STRINGCAST_API_KEY="your-key-here" cargo run -- add-key gemini main "Gemini"
-cargo run -- set-provider gemini
-cargo run -- api-test
+pip install PyQt6 google-generativeai openai python-dotenv pyinstaller
 ```
 
-Run Stringcast:
-
+**3. Run Locally**
+* Ensure your `.env` file is in the root directory.
+* Run the app directly via Python:
 ```bash
-cargo run -- run
-```
+  python stringcast_ui.py
+  ```
 
-Type in a normal text field:
-
-```text
-i dont knwo whats happening ?fix
-```
-
-For detailed local setup, see [RUNNING.md](RUNNING.md).
-
-## Downloadable Builds
-
-Release workflows build downloadable binaries for:
-
-- macOS
-- Windows
-- Linux
-
-Download artifacts from the GitHub Actions release workflow or from GitHub Releases once release publishing is enabled.
-
-See [docs/RELEASES.md](docs/RELEASES.md) for artifact download and smoke-test steps.
-
-The macOS release also includes an unsigned `Stringcast.app` bundle with a companion menu-bar item. See [docs/MACOS_APP.md](docs/MACOS_APP.md) for build and testing notes.
-
-## Development
-
-Run the local checks:
-
+**4. Build the Standalone Executable**
+To compile the app into a single distributable binary, use the included PyInstaller configuration:
 ```bash
-cargo fmt --check
-cargo test
-cargo build
-python3 -m py_compile scripts/wayland_listener.py
+pyinstaller --noconsole --onefile --hidden-import openai --hidden-import google.generativeai --hidden-import dotenv stringcast_ui.py
 ```
+* Your compiled application will be generated inside the `dist/` folder.
 
-Linux builds may need native packages:
+---
 
-```bash
-sudo apt update
-sudo apt install build-essential pkg-config libdbus-1-dev libxdo-dev libx11-dev libxi-dev libxtst-dev
-```
+## 🤝 Contributing
 
-## Documentation
+Contributions are always welcome! Whether it is adding a new AI provider, tweaking the UI, or optimizing the build size:
 
-- [RUNNING.md](RUNNING.md): developer/local run instructions.
-- [docs/WINDOWS.md](docs/WINDOWS.md): Windows setup, installation, usage, and troubleshooting.
-- [docs/RELEASES.md](docs/RELEASES.md): downloadable artifact instructions.
-- [docs/MACOS_APP.md](docs/MACOS_APP.md): macOS app wrapper notes.
-- [SPEC.md](SPEC.md): product and architecture spec.
-- [docs/WAYLAND_POC.md](docs/WAYLAND_POC.md): experimental Linux Wayland listener notes.
+* Fork the Project
+* Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+* Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
+* Push to the Branch (`git push origin feature/AmazingFeature`)
+* Open a Pull Request
 
-## Security Notes
+## 📄 License
 
-Stringcast handles API keys and text from active fields. Avoid using it in password managers, secure input fields, or sensitive apps. The Linux Wayland Python PoC requires keyboard device access and should be treated as experimental.
+Distributed under the MIT License. See the `LICENSE` file for more information.
